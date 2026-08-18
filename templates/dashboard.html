@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeHub | Multi-Node IoT Console</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #07090e;
+            --surface-color: rgba(15, 23, 42, 0.65);
+            --surface-border: rgba(255, 255, 255, 0.08);
+            --primary-accent: #00f2fe;
+            --primary-gradient: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            --anomaly-accent: #ff0844;
+            --anomaly-gradient: linear-gradient(135deg, #ff0844 0%, #ffb199 100%);
+            --success-accent: #00ff87;
+            --success-gradient: linear-gradient(135deg, #00ff87 0%, #60efff 100%);
+            --warning-accent: #f39c12;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --card-radius: 16px;
+            --transition-speed: 0.3s;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 242, 254, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(255, 8, 68, 0.05) 0%, transparent 40%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1, h2, h3, h4, .brand-text {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-accent);
+        }
+
+        /* Layout */
+        header {
+            background: rgba(7, 9, 14, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--surface-border);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo i {
+            font-size: 1.75rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 2px 8px rgba(0, 242, 254, 0.4));
+        }
+
+        .brand-text {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+        }
+
+        .brand-text span {
+            font-weight: 300;
+            color: var(--text-secondary);
+        }
+
+        .controls-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .node-select-container {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--surface-border);
+            border-radius: 50px;
+            padding: 0.4rem 1rem 0.4rem 0.75rem;
+        }
+
+        .node-select-container i {
+            color: var(--primary-accent);
+        }
+
+        select {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 500;
+            outline: none;
+            cursor: pointer;
+            padding-right: 1.5rem;
+        }
+
+        select option {
+            background-color: #0d1527;
+            color: var(--text-primary);
+        }
+
+        .container {
+            flex: 1;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Sidebar node management */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .glass-card {
+            background: var(--surface-color);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--card-radius);
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+            transition: transform var(--transition-speed), border-color var(--transition-speed), box-shadow var(--transition-speed);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(0, 242, 254, 0.15);
+            box-shadow: 0 12px 40px 0 rgba(0, 242, 254, 0.05);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title i {
+            color: var(--text-secondary);
+        }
+
+        .node-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .node-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+        }
+
+        .node-item:hover, .node-item.selected {
+            background: rgba(0, 242, 254, 0.08);
+            border-color: rgba(0, 242, 254, 0.25);
+            transform: translateX(4px);
+        }
+
+        .node-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .node-icon-wrapper {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+        }
+
+        .node-item.selected .node-icon-wrapper {
+            background: var(--primary-accent);
+            color: #07090e;
+        }
+
+        .node-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .node-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .node-ip {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        .node-status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-active {
+            background: var(--success-accent);
+            box-shadow: 0 0 10px var(--success-accent);
+        }
+
+        .status-inactive {
+            background: var(--text-secondary);
+        }
+
+        .status-degraded {
+            background: var(--warning-accent);
+            box-shadow: 0 0 10px var(--warning-accent);
+        }
+
+        /* Main Console Layout */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        /* Dashboard Grid Cards */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--surface-color);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--card-radius);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: transparent;
+        }
+
+        .metric-card.fusion-score::before { background: var(--primary-gradient); }
+        .metric-card.pir::before { background: var(--success-gradient); }
+        .metric-card.temp::before { background: linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%); }
+        .metric-card.other-metrics::before { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
+
+        .metric-card.anomaly-active {
+            animation: pulse-border 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-border {
+            0% {
+                border-color: var(--surface-border);
+                box-shadow: 0 0 5px rgba(255, 8, 68, 0.1);
+            }
+            100% {
+                border-color: rgba(255, 8, 68, 0.6);
+                box-shadow: 0 0 20px rgba(255, 8, 68, 0.3);
+            }
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .metric-header i {
+            font-size: 1rem;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0.75rem 0 0.25rem 0;
+            color: var(--text-primary);
+        }
+
+        .metric-unit {
+            font-size: 0.9rem;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+
+        .metric-footer {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .anomaly-alert-text {
+            color: var(--anomaly-accent);
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .metric-card.anomaly-active .anomaly-alert-text {
+            display: flex;
+        }
+
+        .metric-card.anomaly-active .metric-footer-standard {
+            display: none;
+        }
+
+        /* Central Plot Area */
+        .chart-container {
+            height: 350px;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Mid section with Camera and Logs split */
+        .mid-section {
+            display: grid;
+            grid-template-columns: 4fr 3fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 992px) {
+            .mid-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Camera console */
+        .camera-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .camera-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--surface-border);
+            color: var(--text-primary);
+            padding: 0.6rem 1.2rem;
+            border-radius: 50px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all var(--transition-speed);
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--text-secondary);
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            border: none;
+            color: #07090e;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 20px rgba(0, 242, 254, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .camera-viewport {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: #040508;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-viewport img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .viewport-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .viewport-placeholder i {
+            font-size: 3rem;
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.2) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .viewport-overlay {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .prediction-badge {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .prediction-pest {
+            background: var(--anomaly-gradient);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 8, 68, 0.3);
+        }
+
+        .prediction-clear {
+            background: var(--success-gradient);
+            color: #07090e;
+            border: 1px solid rgba(0, 255, 135, 0.3);
+        }
+
+        /* Image Gallery */
+        .capture-gallery {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+        }
+
+        .gallery-item {
+            aspect-ratio: 4 / 3;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+            transition: all var(--transition-speed);
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .gallery-item:hover {
+            border-color: var(--primary-accent);
+            transform: scale(1.05);
+        }
+
+        .gallery-badge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* Log Browser */
+        .log-panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .log-filters {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .log-filter-btn {
+            background: transparent;
+            border: 1px solid var(--surface-border);
+            color: var(--text-secondary);
+            padding: 0.3rem 0.8rem;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-speed);
+        }
+
+        .log-filter-btn.active, .log-filter-btn:hover {
+            border-color: var(--primary-accent);
+            color: var(--text-primary);
+            background: rgba(0, 242, 254, 0.05);
+        }
+
+        .log-table-container {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 450px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            background: rgba(0, 0, 0, 0.15);
+        }
+
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+            text-align: left;
+        }
+
+        .log-table th {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-secondary);
+            font-weight: 600;
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .log-table td {
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            vertical-align: top;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .log-row-debug { color: #64748b; }
+        .log-row-info { color: #38bdf8; }
+        .log-row-warning { color: #f59e0b; }
+        .log-row-error, .log-row-critical { color: #f87171; background: rgba(239, 68, 68, 0.04); }
+
+        .log-badge {
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.65rem;
+        }
+
+        .log-badge-debug { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
+        .log-badge-info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+        .log-badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .log-badge-error, .log-badge-critical { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+        .log-module {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Pulse animation for Live broadcast indicator */
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--primary-accent);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.25rem;
+            animation: pulse-live 1.2s infinite;
+        }
+
+        @keyframes pulse-live {
+            0% {
+                transform: scale(0.8);
+                box-shadow: 0 0 0 0 rgba(0, 242, 254, 0.7);
+            }
+            70% {
+                transform: scale(1.1);
+                box-shadow: 0 0 0 6px rgba(0, 242, 254, 0);
+            }
+            100% {
+                transform: scale(0.8);
+                box-shadow: 0 0 0 0 rgba(0, 242, 254, 0);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="/" class="logo">
+            <i class="fa-solid fa-tower-broadcast"></i>
+            <div class="brand-text">Edge<span>Hub</span></div>
+        </a>
+        <div class="controls-header">
+            <div class="node-select-container">
+                <i class="fa-solid fa-network-wired"></i>
+                <select id="nodeSelector" onchange="switchNode(this.value)">
+                    <option value="">All Registered Nodes</option>
+                </select>
+            </div>
+            <div>
+                <span class="live-dot"></span>
+                <span style="font-size: 0.75rem; font-weight: 600; color: var(--primary-accent); letter-spacing: 0.5px;">LIVE STREAMING</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar Node List -->
+        <div class="sidebar">
+            <div class="glass-card">
+                <div class="card-title">
+                    <span>Edge Nodes Registry</span>
+                    <i class="fa-solid fa-satellite-dish"></i>
+                </div>
+                <div class="node-list" id="nodeList">
+                    <div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 1rem 0;">
+                        No nodes registered yet
+                    </div>
+                </div>
+            </div>
+            
+            <div class="glass-card">
+                <div class="card-title">
+                    <span>Baseline Calibrator</span>
+                    <i class="fa-solid fa-sliders"></i>
+                </div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4;">
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary)">Method:</strong> Rolling Sample Z-Score Baseline Calibration</p>
+                    <p style="margin-bottom: 0.5rem;"><strong style="color: var(--text-primary)">Window Size:</strong> N = 50 Historical Readings</p>
+                    <p><strong style="color: var(--text-primary)">Threshold:</strong> Z &gt; 2.5 (Severe deviations flag anomalies & highlight charts)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="main-content">
+            <!-- Telemetry Metrics Grid -->
+            <div class="metric-grid">
+                <!-- Fusion Score -->
+                <div class="metric-card fusion-score" id="cardFusion">
+                    <div class="metric-header">
+                        <span>FUSION SCORE</span>
+                        <i class="fa-solid fa-network-wired"></i>
+                    </div>
+                    <div class="metric-value" id="valFusion">0.00</div>
+                    <div class="metric-footer">
+                        <span class="metric-footer-standard"><i class="fa-solid fa-arrows-spin"></i> Local node fusion</span>
+                        <span class="anomaly-alert-text"><i class="fa-solid fa-triangle-exclamation"></i> ANOMALY</span>
+                    </div>
+                </div>
+                <!-- Motion Status -->
+                <div class="metric-card pir" id="cardPir">
+                    <div class="metric-header">
+                        <span>PIR MOTION</span>
+                        <i class="fa-solid fa-person-running"></i>
+                    </div>
+                    <div class="metric-value" id="valPir">CLEAR</div>
+                    <div class="metric-footer">
+                        <span class="metric-footer-standard"><i class="fa-solid fa-shield-halved"></i> Active boundary check</span>
+                        <span class="anomaly-alert-text"><i class="fa-solid fa-triangle-exclamation"></i> MOTION</span>
+                    </div>
+                </div>
+                <!-- Temp / Hum -->
+                <div class="metric-card temp">
+                    <div class="metric-header">
+                        <span>TEMPERATURE</span>
+                        <i class="fa-solid fa-thermometer"></i>
+                    </div>
+                    <div class="metric-value" id="valTemp">0.0<span class="metric-unit">°C</span></div>
+                    <div class="metric-footer" id="valHum">
+                        <i class="fa-solid fa-droplet"></i> Humidity: 0.0%
+                    </div>
+                </div>
+                <!-- Ultrasonic Range & Gas -->
+                <div class="metric-card other-metrics">
+                    <div class="metric-header">
+                        <span>RANGE & GAS</span>
+                        <i class="fa-solid fa-gauge-high"></i>
+                    </div>
+                    <div class="metric-value" id="valDistance">0<span class="metric-unit">cm</span></div>
+                    <div class="metric-footer" id="valGas">
+                        <i class="fa-solid fa-wind"></i> Gas: 0 ppm
+                    </div>
+                </div>
+            </div>
+
+            <!-- Time-Series Analytics Plot -->
+            <div class="glass-card">
+                <div class="card-title">
+                    <span>Rolling Telemetry Stream & Anomaly Overlay</span>
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="chart-container">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Split Section: Camera + Logs -->
+            <div class="mid-section">
+                <!-- Camera Viewport & Capture Log -->
+                <div class="glass-card camera-panel">
+                    <div class="card-title">
+                        <span>Dynamic Camera Proxy Console</span>
+                        <div class="camera-actions">
+                            <button class="btn btn-primary" id="btnTrigger" onclick="triggerRemoteCapture()" disabled>
+                                <i class="fa-solid fa-bolt"></i> Remote Trigger
+                            </button>
+                            <button class="btn" id="btnCapture" onclick="fetchLiveCapture()" disabled>
+                                <i class="fa-solid fa-camera"></i> Live Capture
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="camera-viewport">
+                        <div class="viewport-overlay" id="camStatusOverlay">
+                            <span class="live-dot" style="margin-right: 0.25rem;"></span>
+                            <span id="camOverlayText">DISCONNECTED</span>
+                        </div>
+                        <div class="prediction-badge prediction-clear" id="pestBadge" style="display:none;">
+                            <i class="fa-solid fa-circle-check"></i> <span id="pestBadgeText">CLEAR</span>
+                        </div>
+                        
+                        <div class="viewport-placeholder" id="viewportPlaceholder">
+                            <i class="fa-solid fa-image"></i>
+                            <p>No active camera selected.<br>Select a camera node to view live feeds or trigger manual captures.</p>
+                        </div>
+                        <img id="cameraFeed" style="display: none;" alt="Camera capture feed">
+                    </div>
+
+                    <div class="capture-gallery">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-secondary);">Recent Captures</div>
+                        <div class="gallery-grid" id="galleryGrid">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Structured Log Browser -->
+                <div class="glass-card log-panel">
+                    <div class="card-title">
+                        <span>Centralized System Log Registry</span>
+                        <i class="fa-solid fa-list-check"></i>
+                    </div>
+                    
+                    <div class="log-filters">
+                        <button class="log-filter-btn active" onclick="filterLogs(this, '')">ALL</button>
+                        <button class="log-filter-btn" onclick="filterLogs(this, 'INFO')">INFO</button>
+                        <button class="log-filter-btn" onclick="filterLogs(this, 'WARNING')">WARN</button>
+                        <button class="log-filter-btn" onclick="filterLogs(this, 'ERROR')">ERROR</button>
+                        <button class="log-filter-btn" onclick="filterLogs(this, 'CRITICAL')">CRIT</button>
+                    </div>
+
+                    <div class="log-table-container">
+                        <table class="log-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 75px;">TIME</th>
+                                    <th style="width: 60px;">LEVEL</th>
+                                    <th style="width: 80px;">MODULE</th>
+                                    <th>MESSAGE</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logTableBody">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-secondary); padding: 2rem 0;">
+                                        Scanning database logs...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        let currentSelectedNode = "";
+        let telemetryChart = null;
+        let eventSource = null;
+        let activeFilterLevel = "";
+        let baseUrl = 'http://127.0.0.1:5000'
+        const maxChartDataPoints = 30;
+
+        // Initialize Telemetry Chart
+        function initChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            
+            // Create nice blue primary gradient for chart line
+            const primaryGrad = ctx.createLinearGradient(0, 0, 0, 300);
+            primaryGrad.addColorStop(0, 'rgba(0, 242, 254, 0.4)');
+            primaryGrad.addColorStop(1, 'rgba(0, 242, 254, 0.0)');
+
+            telemetryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Sensor Fusion Score',
+                            data: [],
+                            borderColor: '#00f2fe',
+                            borderWidth: 2,
+                            backgroundColor: primaryGrad,
+                            fill: true,
+                            tension: 0.3,
+                            pointBackgroundColor: [],
+                            pointBorderColor: [],
+                            pointRadius: [],
+                            pointHoverRadius: []
+                        },
+                        {
+                            label: 'Distance (Meters / 100)',
+                            data: [],
+                            borderColor: '#a18cd1',
+                            borderWidth: 1.5,
+                            fill: false,
+                            borderDash: [5, 5],
+                            tension: 0.1,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                            ticks: { color: '#64748b', font: { size: 9 } }
+                        },
+                        y: {
+                            min: 0,
+                            max: 1.2,
+                            grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                            ticks: { color: '#64748b' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#f8fafc', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add telemetry point to chart
+        function addChartData(timestamp, score, distance, isAnomaly) {
+            if (!telemetryChart) return;
+
+            const timeLabel = timestamp.split(' ')[1] || timestamp;
+            
+            telemetryChart.data.labels.push(timeLabel);
+            telemetryChart.data.datasets[0].data.push(score);
+            
+            // Map distance from cm to a 0.0 - 1.0 scale (e.g. 100cm = 1.0)
+            const mapDistance = distance > 0 ? Math.min(distance / 100.0, 1.0) : 0;
+            telemetryChart.data.datasets[1].data.push(mapDistance);
+
+            // Highlight anomaly data point in flashing pink/red
+            if (isAnomaly) {
+                telemetryChart.data.datasets[0].pointBackgroundColor.push('#ff0844');
+                telemetryChart.data.datasets[0].pointBorderColor.push('#ffffff');
+                telemetryChart.data.datasets[0].pointRadius.push(6);
+                telemetryChart.data.datasets[0].pointHoverRadius.push(8);
+            } else {
+                telemetryChart.data.datasets[0].pointBackgroundColor.push('#00f2fe');
+                telemetryChart.data.datasets[0].pointBorderColor.push('transparent');
+                telemetryChart.data.datasets[0].pointRadius.push(3);
+                telemetryChart.data.datasets[0].pointHoverRadius.push(5);
+            }
+
+            // Cap the chart points window
+            if (telemetryChart.data.labels.length > maxChartDataPoints) {
+                telemetryChart.data.labels.shift();
+                telemetryChart.data.datasets[0].data.shift();
+                telemetryChart.data.datasets[1].data.shift();
+                telemetryChart.data.datasets[0].pointBackgroundColor.shift();
+                telemetryChart.data.datasets[0].pointBorderColor.shift();
+                telemetryChart.data.datasets[0].pointRadius.shift();
+                telemetryChart.data.datasets[0].pointHoverRadius.shift();
+            }
+
+            telemetryChart.update();
+        }
+
+        // Fetch registry and update node lists
+        async function fetchNodes() {
+            try {
+                const response = await fetch(baseUrl + '/api/v1/nodes');
+                const nodes = await response.json();
+                
+                const selector = document.getElementById('nodeSelector');
+                const list = document.getElementById('nodeList');
+                
+                // Track currently selected index or value
+                const prevSelection = currentSelectedNode;
+
+                // Clear
+                selector.innerHTML = '<option value="">All Registered Nodes</option>';
+                list.innerHTML = '';
+                
+                if (nodes.length === 0) {
+                    list.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 1rem 0;">No nodes registered yet</div>`;
+                    return;
+                }
+
+                let cameraNodesCount = 0;
+
+                nodes.forEach(node => {
+                    // Populate Dropdown selector
+                    const opt = document.createElement('option');
+                    opt.value = node.node_id;
+                    opt.textContent = `${node.node_id} [${node.node_type.toUpperCase()}]`;
+                    if (node.node_id === prevSelection) opt.selected = true;
+                    selector.appendChild(opt);
+
+                    // Populate Sidebar Items
+                    const nodeDiv = document.createElement('div');
+                    nodeDiv.className = `node-item ${node.node_id === prevSelection ? 'selected' : ''}`;
+                    nodeDiv.onclick = () => {
+                        document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
+                        nodeDiv.classList.add('selected');
+                        selector.value = node.node_id;
+                        switchNode(node.node_id);
+                    };
+
+                    let icon = 'fa-microchip';
+                    if (node.node_type === 'camera') {
+                        icon = 'fa-camera';
+                        cameraNodesCount++;
+                    } else if (node.node_type === 'hybrid') {
+                        icon = 'fa-robot';
+                    }
+
+                    nodeDiv.innerHTML = `
+                        <div class="node-info">
+                            <div class="node-icon-wrapper">
+                                <i class="fa-solid ${icon}"></i>
+                            </div>
+                            <div class="node-details">
+                                <span class="node-name">${node.node_id}</span>
+                                <span class="node-ip">${node.ip_address}</span>
+                            </div>
+                        </div>
+                        <span class="node-status-indicator status-${node.status}"></span>
+                    `;
+                    list.appendChild(nodeDiv);
+                });
+
+                // Update trigger button states if cameras are available
+                const isCamera = prevSelection.startsWith('cam') || prevSelection.includes('camera') || 
+                                 (nodes.some(n => n.node_id === prevSelection && n.node_type === 'camera'));
+                                 
+                document.getElementById('btnTrigger').disabled = !isCamera;
+                document.getElementById('btnCapture').disabled = !isCamera;
+
+            } catch (err) {
+                console.error("Error fetching nodes registry:", err);
+            }
+        }
+
+        // Fetch logs with levels filter
+        async function fetchLogs() {
+            try {
+                let url =baseUrl +  `/api/v1/logs?limit=50`;
+                if (currentSelectedNode) url += `&node_id=${currentSelectedNode}`;
+                if (activeFilterLevel) url += `&level=${activeFilterLevel}`;
+
+                const response = await fetch(url);
+                const logs = await response.json();
+                
+                const tableBody = document.getElementById('logTableBody');
+                tableBody.innerHTML = '';
+
+                if (logs.length === 0) {
+                    tableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--text-secondary); padding: 1.5rem 0;">No logs found</td></tr>`;
+                    return;
+                }
+
+                logs.forEach(log => {
+                    const row = document.createElement('tr');
+                    row.className = `log-row-${log.level.toLowerCase()}`;
+                    
+                    const time = log.timestamp.split(' ')[1] || log.timestamp;
+                    
+                    row.innerHTML = `
+                        <td>${time}</td>
+                        <td><span class="log-badge log-badge-${log.level.toLowerCase()}">${log.level}</span></td>
+                        <td class="log-module">${log.module}</td>
+                        <td>${log.message} ${log.details_json ? `<span style="font-size:0.65rem; opacity:0.6;"><br>Details: ${log.details_json}</span>` : ''}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } catch (err) {
+                console.error("Error loading system logs:", err);
+            }
+        }
+
+        // Switch focusing node
+        function switchNode(nodeId) {
+            // Save selected node
+            currentSelectedNode = nodeId;
+
+            // Stop old live stream and reset displayed telemetry
+            // resetMetrics();
+
+            // Start live telemetry for the new node
+            setupTelemetrySSE();
+
+            // Load data for the new node
+            loadHistory();
+            // fetchLogs();
+            // fetchCaptures();
+
+            // Update camera UI
+            const isCamera =
+                nodeId.startsWith('cam') ||
+                nodeId.includes('camera');
+
+            const placeholder =
+                document.getElementById('viewportPlaceholder');
+
+            const img =
+                document.getElementById('cameraFeed');
+
+            const overlayText =
+                document.getElementById('camOverlayText');
+
+            const btnTrigger =
+                document.getElementById('btnTrigger');
+
+            const btnCapture =
+                document.getElementById('btnCapture');
+
+            if (isCamera) {
+                placeholder.style.display = 'none';
+                img.style.display = 'block';
+
+                img.src = '/static/images/cam_offline_mock.jpg';
+
+                overlayText.textContent = 'CONNECTED (IDLE)';
+
+                btnTrigger.disabled = false;
+                btnCapture.disabled = false;
+            } else {
+                placeholder.style.display = 'flex';
+                img.style.display = 'none';
+
+                document.getElementById('pestBadge').style.display = 'none';
+
+                overlayText.textContent = 'DISCONNECTED';
+
+                btnTrigger.disabled = true;
+                btnCapture.disabled = true;
+            }
+        }
+        // Reset metrics elements
+        function resetMetrics() {
+            document.getElementById('valFusion').textContent = '0.00';
+            document.getElementById('valPir').textContent = 'CLEAR';
+            document.getElementById('cardPir').classList.remove('anomaly-active');
+            document.getElementById('cardFusion').classList.remove('anomaly-active');
+            document.getElementById('valTemp').innerHTML = '0.0<span class="metric-unit">°C</span>';
+            document.getElementById('valHum').innerHTML = '<i class="fa-solid fa-droplet"></i> Humidity: 0.0%';
+            document.getElementById('valDistance').innerHTML = '0<span class="metric-unit">cm</span>';
+            document.getElementById('valGas').innerHTML = '<i class="fa-solid fa-wind"></i> Gas: 0 ppm';
+            
+            if (telemetryChart) {
+                telemetryChart.data.labels = [];
+                telemetryChart.data.datasets[0].data = [];
+                telemetryChart.data.datasets[1].data = [];
+                telemetryChart.data.datasets[0].pointBackgroundColor = [];
+                telemetryChart.data.datasets[0].pointBorderColor = [];
+                telemetryChart.data.datasets[0].pointRadius = [];
+                telemetryChart.data.datasets[0].pointHoverRadius = [];
+                telemetryChart.update();
+            }
+        }
+
+        // Fetch historical logs from SQL for charts
+        async function loadHistory() {
+            try {
+                let url =baseUrl + `/api/v1/sensors/history?limit=${maxChartDataPoints}`;
+                if (currentSelectedNode) url += `&node_id=${currentSelectedNode}`;
+
+                const response = await fetch(url);
+                const history = await response.json();
+
+                if (history && history.length > 0) {
+                    history.forEach(log => {
+                        addChartData(log.timestamp, log.fusion_score, log.distance_cm, log.is_anomaly);
+                    });
+                    
+                    // Display latest index point on dashboard cards
+                    const latest = history[history.length - 1];
+                    updateMetricsUI(latest);
+                }
+            } catch (err) {
+                console.error("Error loading historical sensor logs:", err);
+            }
+        }
+
+        // Connect Server-Sent Events stream for telemetry
+        function setupTelemetrySSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            let url = baseUrl + "/api/v1/sensors/live";
+            if (currentSelectedNode) {
+                url += `?node_id=${currentSelectedNode}`;
+            }
+
+            eventSource = new EventSource(url);
+            
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                // Check if blank ping data
+                if (Object.keys(data).length === 0) return;
+
+                // Update dashboard elements
+                updateMetricsUI(data);
+
+                // Add to rolling chart
+                addChartData(data.timestamp, data.fusion_score, data.distance_cm, data.is_anomaly);
+            };
+
+            eventSource.onerror = function(err) {
+                console.warn("SSE connection error, attempting automatic reconnect...", err);
+            };
+        }
+
+        // Update single metric indicators on Screen
+        function updateMetricsUI(data) {
+            document.getElementById('valFusion').textContent = data.fusion_score.toFixed(2);
+            
+            // Motion indicator logic
+            const pirVal = document.getElementById('valPir');
+            const cardPir = document.getElementById('cardPir');
+            if (data.pir === 1) {
+                pirVal.textContent = "MOTION";
+                cardPir.classList.add('anomaly-active');
+            } else {
+                pirVal.textContent = "CLEAR";
+                cardPir.classList.remove('anomaly-active');
+            }
+
+            // Anomaly indicator on fusion
+            const cardFusion = document.getElementById('cardFusion');
+            if (data.is_anomaly === 1) {
+                cardFusion.classList.add('anomaly-active');
+            } else {
+                cardFusion.classList.remove('anomaly-active');
+            }
+
+            // Temp Humidity
+            document.getElementById('valTemp').innerHTML = `${data.temp_c.toFixed(1)}<span class="metric-unit">°C</span>`;
+            document.getElementById('valHum').innerHTML = `<i class="fa-solid fa-droplet"></i> Humidity: ${data.humidity.toFixed(1)}%`;
+
+            // Distance Gas
+            const distanceText = data.distance_cm >= 0 ? `${data.distance_cm.toFixed(0)}` : 'N/A';
+            document.getElementById('valDistance').innerHTML = `${distanceText}<span class="metric-unit">cm</span>`;
+            document.getElementById('valGas').innerHTML = `<i class="fa-solid fa-wind"></i> Gas: ${data.gas} ppm`;
+        }
+
+        // Filter system event log by levels
+        function filterLogs(btn, level) {
+            document.querySelectorAll('.log-filter-btn').forEach(el => el.classList.remove('active'));
+            btn.classList.add('active');
+            activeFilterLevel = level;
+            fetchLogs();
+        }
+
+        // Manual Camera Trigger HTTP request
+        async function triggerRemoteCapture() {
+            if (!currentSelectedNode) return;
+            
+            const btn = document.getElementById('btnTrigger');
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(baseUrl + `/api/v1/camera/trigger`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ node_id: currentSelectedNode })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`Trigger command sent to camera node successfully!\nResponse: ${result.response}`);
+                } else {
+                    alert(`Failed to trigger camera: ${result.error}`);
+                }
+            } catch (err) {
+                alert(`Error executing proxy trigger request: ${err}`);
+            } finally {
+                btn.disabled = false;
+                // Wait briefly then pull updates
+                setTimeout(() => { fetchLogs(); fetchCaptures(); }, 1500);
+            }
+        }
+
+        // Immediate live screen pull
+        async function fetchLiveCapture() {
+            if (!currentSelectedNode) return;
+
+            const btn = document.getElementById('btnCapture');
+            const overlayText = document.getElementById('camOverlayText');
+            btn.disabled = true;
+            overlayText.textContent = "CAPTURING...";
+
+            try {
+                // Fetch the live JPEG stream proxy directly from camera node
+                const url = baseUrl + `/api/v1/camera/capture?node_id=${currentSelectedNode}`;
+                const response = await fetch(url);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const objectURL = URL.createObjectURL(blob);
+                    
+                    const img = document.getElementById('cameraFeed');
+                    const placeholder = document.getElementById('viewportPlaceholder');
+                    
+                    placeholder.style.display = 'none';
+                    img.style.display = 'block';
+                    img.src = objectURL;
+                    
+                    overlayText.textContent = "LIVE FRAME RETRIEVED";
+                    setTimeout(() => { overlayText.textContent = "CONNECTED (IDLE)"; }, 2000);
+                } else {
+                    const errorJson = await response.json();
+                    alert(`Error fetching live capture: ${errorJson.error}`);
+                    overlayText.textContent = "ERROR";
+                }
+            } catch (err) {
+                alert(`Proxy connection error: ${err}`);
+                overlayText.textContent = "OFFLINE";
+            } finally {
+                btn.disabled = false;
+                setTimeout(() => { fetchLogs(); fetchCaptures(); }, 1500);
+            }
+        }
+
+        // Fetch recent captures gallery
+        async function fetchCaptures() {
+            try {
+                let url =baseUrl + "/api/v1/captures?limit=8";
+                if (currentSelectedNode) url += `&node_id=${currentSelectedNode}`;
+
+                const response = await fetch(url);
+                const captures = await response.json();
+
+                const grid = document.getElementById('galleryGrid');
+                grid.innerHTML = '';
+
+                if (captures.length === 0) {
+                    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); font-size: 0.75rem; padding: 1rem 0;">No images captured yet</div>`;
+                    return;
+                }
+
+                // Render main viewport image with prediction metadata using the first capture
+                const latestCap = captures[0];
+                if (latestCap.processing_status === 'completed' || latestCap.processing_status === 'processing') {
+                    const mainFeed = document.getElementById('cameraFeed');
+                    const mainPlaceholder = document.getElementById('viewportPlaceholder');
+                    mainPlaceholder.style.display = 'none';
+                    mainFeed.style.display = 'block';
+                    mainFeed.src = `/${latestCap.file_path}`;
+
+                    // Update overlays
+                    const badge = document.getElementById('pestBadge');
+                    const badgeText = document.getElementById('pestBadgeText');
+                    
+                    if (latestCap.prediction !== null) {
+                        badge.style.display = 'flex';
+                        if (latestCap.prediction > 0) {
+                            badge.className = "prediction-badge prediction-pest";
+                            badgeText.textContent = `PEST DETECTED (Class ${latestCap.prediction})`;
+                        } else {
+                            badge.className = "prediction-badge prediction-clear";
+                            badgeText.textContent = "CLEAR";
+                        }
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                    
+                    const overlayText = document.getElementById('camOverlayText');
+                    overlayText.textContent = `STORED CAPTURE (${latestCap.timestamp.split(' ')[1]})`;
+                }
+
+                // Populate gallery grid
+                captures.forEach(cap => {
+                    const item = document.createElement('div');
+                    item.className = 'gallery-item';
+                    
+                    // Trigger overlay update when clicked
+                    item.onclick = () => {
+                        const mainFeed = document.getElementById('cameraFeed');
+                        mainFeed.src = `/${cap.file_path}`;
+                        
+                        const badge = document.getElementById('pestBadge');
+                        const badgeText = document.getElementById('pestBadgeText');
+                        
+                        if (cap.prediction !== null) {
+                            badge.style.display = 'flex';
+                            if (cap.prediction > 0) {
+                                badge.className = "prediction-badge prediction-pest";
+                                badgeText.textContent = `PEST DETECTED (Class ${cap.prediction})`;
+                            } else {
+                                badge.className = "prediction-badge prediction-clear";
+                                badgeText.textContent = "CLEAR";
+                            }
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                        
+                        document.getElementById('camOverlayText').textContent = `STORED CAPTURE (${cap.timestamp.split(' ')[1]})`;
+                    };
+
+                    const dotColor = cap.prediction > 0 ? 'var(--anomaly-accent)' : 'var(--success-accent)';
+                    item.innerHTML = `
+                        <img src="/${cap.file_path}" alt="Captured pest field image">
+                        <div class="gallery-badge" style="background-color: ${cap.prediction !== null ? dotColor : '#7e8a9b'}"></div>
+                    `;
+                    grid.appendChild(item);
+                });
+
+            } catch (err) {
+                console.error("Error loading capture logs:", err);
+            }
+        }
+
+        // Startup routine
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            fetchNodes();
+            fetchLogs();
+            fetchCaptures();
+            setupTelemetrySSE();
+
+            // Periodic heartbeat registry and active log scanning (every 6 seconds)
+            setInterval(() => {
+                fetchNodes();
+                fetchLogs();
+                // If focus node is not updating fast, check captures too
+                if (!currentSelectedNode || currentSelectedNode.startsWith('cam')) {
+                    fetchCaptures();
+                }
+            }, 60000);
+        });
+    </script>
+</body>
+</html>
