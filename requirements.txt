@@ -4,6 +4,7 @@ requests
 
 # Optional: PyTorch & Torchvision if you want to run the actual AI classification model.
 # If these are not installed, the server will run in "Mock Mode" using mock predictions.
-torch
-torchvision
+#torch
+#torchvision
 datetime
+flask-cors

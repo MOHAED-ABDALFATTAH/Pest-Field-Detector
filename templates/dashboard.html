@@ -715,8 +715,8 @@
                 </select>
             </div>
             <div>
-                <span class="live-dot"></span>
-                <span style="font-size: 0.75rem; font-weight: 600; color: var(--primary-accent); letter-spacing: 0.5px;">LIVE STREAMING</span>
+                <span class="live-dot" id="liveStatusDot" aria-label="Telemetry connection status"></span>
+                <span id="liveStatusText" style="font-size: 0.75rem; font-weight: 600; color: var(--primary-accent); letter-spacing: 0.5px;">LIVE STREAMING</span>
             </div>
         </div>
     </header>
@@ -893,11 +893,27 @@
 
     <!-- Scripts -->
     <script>
-        let currentSelectedNode = "";
+        function readCachedJson(key, fallback) {
+            try {
+                const value = localStorage.getItem(key);
+                return value ? JSON.parse(value) : fallback;
+            } catch (error) {
+                localStorage.removeItem(key);
+                return fallback;
+            }
+        }
+
+        let currentSelectedNode = localStorage.getItem('edgehub.selectedNode') || "";
         let telemetryChart = null;
         let eventSource = null;
         let activeFilterLevel = "";
-        let baseUrl = 'http://127.0.0.1:5000'
+        let historyRequestId = 0;
+        let nodeStateCache = readCachedJson('edgehub.nodeState', {});
+        let nodeRegistryCache = readCachedJson('edgehub.nodeRegistry', []);
+        let renderedNodeSignature = '';
+        const isSeparateDevFrontend = ['127.0.0.1', 'localhost'].includes(window.location.hostname) &&
+            window.location.port === '5500';
+        let baseUrl = isSeparateDevFrontend ? 'http://127.0.0.1:5000' : window.location.origin;
         const maxChartDataPoints = 30;
 
         // Initialize Telemetry Chart
@@ -1007,24 +1023,48 @@
         async function fetchNodes() {
             try {
                 const response = await fetch(baseUrl + '/api/v1/nodes');
+                if (!response.ok) throw new Error(`Registry request failed: ${response.status}`);
+
                 const nodes = await response.json();
-                
+                if (!Array.isArray(nodes)) throw new Error('Registry response was not a node list');
+
+                // Do not erase a working registry because of a transient empty response.
+                if (nodes.length === 0 && nodeRegistryCache.length > 0) return;
+
+                nodeRegistryCache = nodes;
+                localStorage.setItem('edgehub.nodeRegistry', JSON.stringify(nodes));
+                renderNodeRegistry(nodes);
+            } catch (err) {
+                console.warn("Keeping cached node registry after fetch failure:", err);
+            }
+        }
+
+        function renderNodeRegistry(nodes) {
+            const signature = JSON.stringify(nodes.map(node => [
+                node.node_id, node.node_type, node.ip_address, node.status
+            ]));
+            if (signature === renderedNodeSignature) return;
+            renderedNodeSignature = signature;
+
                 const selector = document.getElementById('nodeSelector');
                 const list = document.getElementById('nodeList');
                 
                 // Track currently selected index or value
                 const prevSelection = currentSelectedNode;
 
-                // Clear
-                selector.innerHTML = '<option value="">All Registered Nodes</option>';
-                list.innerHTML = '';
+                const selectorFragment = document.createDocumentFragment();
+                const listFragment = document.createDocumentFragment();
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'All Registered Nodes';
+                selectorFragment.appendChild(defaultOption);
                 
                 if (nodes.length === 0) {
-                    list.innerHTML = `<div style="text-align: center; color: var(--text-secondary); padding: 1rem 0;">No nodes registered yet</div>`;
-                    return;
+                    const emptyState = document.createElement('div');
+                    emptyState.style.cssText = 'text-align: center; color: var(--text-secondary); padding: 1rem 0;';
+                    emptyState.textContent = 'No nodes registered yet';
+                    listFragment.appendChild(emptyState);
                 }
-
-                let cameraNodesCount = 0;
 
                 nodes.forEach(node => {
                     // Populate Dropdown selector
@@ -1032,13 +1072,13 @@
                     opt.value = node.node_id;
                     opt.textContent = `${node.node_id} [${node.node_type.toUpperCase()}]`;
                     if (node.node_id === prevSelection) opt.selected = true;
-                    selector.appendChild(opt);
+                    selectorFragment.appendChild(opt);
 
                     // Populate Sidebar Items
                     const nodeDiv = document.createElement('div');
                     nodeDiv.className = `node-item ${node.node_id === prevSelection ? 'selected' : ''}`;
                     nodeDiv.onclick = () => {
-                        document.querySelectorAll('.node-item').forEach(el => el.classList.remove('selected'));
+                        document.querySelectorAll('.node-item').forEach(element => element.classList.remove('selected'));
                         nodeDiv.classList.add('selected');
                         selector.value = node.node_id;
                         switchNode(node.node_id);
@@ -1047,7 +1087,6 @@
                     let icon = 'fa-microchip';
                     if (node.node_type === 'camera') {
                         icon = 'fa-camera';
-                        cameraNodesCount++;
                     } else if (node.node_type === 'hybrid') {
                         icon = 'fa-robot';
                     }
@@ -1064,8 +1103,11 @@
                         </div>
                         <span class="node-status-indicator status-${node.status}"></span>
                     `;
-                    list.appendChild(nodeDiv);
+                    listFragment.appendChild(nodeDiv);
                 });
+
+                selector.replaceChildren(selectorFragment);
+                list.replaceChildren(listFragment);
 
                 // Update trigger button states if cameras are available
                 const isCamera = prevSelection.startsWith('cam') || prevSelection.includes('camera') || 
@@ -1073,10 +1115,6 @@
                                  
                 document.getElementById('btnTrigger').disabled = !isCamera;
                 document.getElementById('btnCapture').disabled = !isCamera;
-
-            } catch (err) {
-                console.error("Error fetching nodes registry:", err);
-            }
         }
 
         // Fetch logs with levels filter
@@ -1118,14 +1156,14 @@
 
         // Switch focusing node
         function switchNode(nodeId) {
+            if (currentSelectedNode === nodeId) return;
+
             // Save selected node
             currentSelectedNode = nodeId;
+            localStorage.setItem('edgehub.selectedNode', nodeId);
 
-            // Stop old live stream and reset displayed telemetry
-            // resetMetrics();
-
-            // Start live telemetry for the new node
-            setupTelemetrySSE();
+            // The SSE connection remains open; incoming data is filtered locally.
+            restoreNodeState(nodeId);
 
             // Load data for the new node
             loadHistory();
@@ -1133,9 +1171,7 @@
             // fetchCaptures();
 
             // Update camera UI
-            const isCamera =
-                nodeId.startsWith('cam') ||
-                nodeId.includes('camera');
+            const isCamera = isCameraNode(nodeId);
 
             const placeholder =
                 document.getElementById('viewportPlaceholder');
@@ -1174,17 +1210,16 @@
                 btnCapture.disabled = true;
             }
         }
-        // Reset metrics elements
-        function resetMetrics() {
-            document.getElementById('valFusion').textContent = '0.00';
-            document.getElementById('valPir').textContent = 'CLEAR';
-            document.getElementById('cardPir').classList.remove('anomaly-active');
-            document.getElementById('cardFusion').classList.remove('anomaly-active');
-            document.getElementById('valTemp').innerHTML = '0.0<span class="metric-unit">°C</span>';
-            document.getElementById('valHum').innerHTML = '<i class="fa-solid fa-droplet"></i> Humidity: 0.0%';
-            document.getElementById('valDistance').innerHTML = '0<span class="metric-unit">cm</span>';
-            document.getElementById('valGas').innerHTML = '<i class="fa-solid fa-wind"></i> Gas: 0 ppm';
-            
+
+        function isCameraNode(nodeId) {
+            if (!nodeId) return false;
+            const registeredNode = nodeRegistryCache.find(node => node.node_id === nodeId);
+            return registeredNode?.node_type === 'camera' ||
+                nodeId.startsWith('cam') ||
+                nodeId.toLowerCase().includes('camera');
+        }
+
+        function renderHistory(history) {
             if (telemetryChart) {
                 telemetryChart.data.labels = [];
                 telemetryChart.data.datasets[0].data = [];
@@ -1193,23 +1228,42 @@
                 telemetryChart.data.datasets[0].pointBorderColor = [];
                 telemetryChart.data.datasets[0].pointRadius = [];
                 telemetryChart.data.datasets[0].pointHoverRadius = [];
-                telemetryChart.update();
+
+                history.forEach(log => {
+                    addChartData(log.timestamp, log.fusion_score, log.distance_cm, log.is_anomaly);
+                });
             }
+        }
+
+        function restoreNodeState(nodeId) {
+            const state = nodeStateCache[nodeId];
+            if (!state) return;
+
+            if (state.latest) updateMetricsUI(state.latest);
+            if (state.history) renderHistory(state.history);
         }
 
         // Fetch historical logs from SQL for charts
         async function loadHistory() {
+            const requestId = ++historyRequestId;
+            const requestedNode = currentSelectedNode;
+
             try {
                 let url =baseUrl + `/api/v1/sensors/history?limit=${maxChartDataPoints}`;
-                if (currentSelectedNode) url += `&node_id=${currentSelectedNode}`;
+                if (requestedNode) url += `&node_id=${requestedNode}`;
 
                 const response = await fetch(url);
                 const history = await response.json();
 
+                if (requestId !== historyRequestId || requestedNode !== currentSelectedNode) return;
+
                 if (history && history.length > 0) {
-                    history.forEach(log => {
-                        addChartData(log.timestamp, log.fusion_score, log.distance_cm, log.is_anomaly);
-                    });
+                    nodeStateCache[requestedNode || 'all'] = {
+                        history: history.slice(-maxChartDataPoints),
+                        latest: history[history.length - 1]
+                    };
+                    localStorage.setItem('edgehub.nodeState', JSON.stringify(nodeStateCache));
+                    renderHistory(history);
                     
                     // Display latest index point on dashboard cards
                     const latest = history[history.length - 1];
@@ -1222,33 +1276,44 @@
 
         // Connect Server-Sent Events stream for telemetry
         function setupTelemetrySSE() {
-            if (eventSource) {
-                eventSource.close();
-            }
+            if (eventSource) return;
 
-            let url = baseUrl + "/api/v1/sensors/live";
-            if (currentSelectedNode) {
-                url += `?node_id=${currentSelectedNode}`;
-            }
+            eventSource = new EventSource(baseUrl + "/api/v1/sensors/live");
 
-            eventSource = new EventSource(url);
+            eventSource.onopen = function() {
+                setLiveStatus('LIVE');
+            };
             
             eventSource.onmessage = function(event) {
                 const data = JSON.parse(event.data);
                 
                 // Check if blank ping data
                 if (Object.keys(data).length === 0) return;
+                if (currentSelectedNode && data.node_id !== currentSelectedNode) return;
 
                 // Update dashboard elements
                 updateMetricsUI(data);
+                const cacheKey = data.node_id || 'all';
+                const state = nodeStateCache[cacheKey] || { history: [] };
+                state.latest = data;
+                state.history = [...state.history, data].slice(-maxChartDataPoints);
+                nodeStateCache[cacheKey] = state;
+                localStorage.setItem('edgehub.nodeState', JSON.stringify(nodeStateCache));
 
                 // Add to rolling chart
                 addChartData(data.timestamp, data.fusion_score, data.distance_cm, data.is_anomaly);
             };
 
             eventSource.onerror = function(err) {
-                console.warn("SSE connection error, attempting automatic reconnect...", err);
+                setLiveStatus('RECONNECTING...');
+                console.warn("SSE connection error, browser will retry automatically", err);
             };
+        }
+
+        function setLiveStatus(status) {
+            const statusDot = document.getElementById('liveStatusDot');
+            statusDot.style.backgroundColor = status === 'LIVE' ? 'var(--primary-accent)' : 'var(--warning-accent)';
+            statusDot.title = status === 'LIVE' ? 'Telemetry live' : 'Telemetry reconnecting';
         }
 
         // Update single metric indicators on Screen
@@ -1294,7 +1359,7 @@
 
         // Manual Camera Trigger HTTP request
         async function triggerRemoteCapture() {
-            if (!currentSelectedNode) return;
+            if (!isCameraNode(currentSelectedNode)) return;
             
             const btn = document.getElementById('btnTrigger');
             btn.disabled = true;
@@ -1323,7 +1388,7 @@
 
         // Immediate live screen pull
         async function fetchLiveCapture() {
-            if (!currentSelectedNode) return;
+            if (!isCameraNode(currentSelectedNode)) return;
 
             const btn = document.getElementById('btnCapture');
             const overlayText = document.getElementById('camOverlayText');
@@ -1364,6 +1429,8 @@
 
         // Fetch recent captures gallery
         async function fetchCaptures() {
+            if (currentSelectedNode && !isCameraNode(currentSelectedNode)) return;
+
             try {
                 let url =baseUrl + "/api/v1/captures?limit=8";
                 if (currentSelectedNode) url += `&node_id=${currentSelectedNode}`;
@@ -1454,20 +1521,17 @@
         // Startup routine
         window.addEventListener('DOMContentLoaded', () => {
             initChart();
+            restoreNodeState(currentSelectedNode);
+            if (nodeRegistryCache.length > 0) renderNodeRegistry(nodeRegistryCache);
             fetchNodes();
             fetchLogs();
-            fetchCaptures();
+            if (!currentSelectedNode || isCameraNode(currentSelectedNode)) fetchCaptures();
             setupTelemetrySSE();
 
-            // Periodic heartbeat registry and active log scanning (every 6 seconds)
+            // Refresh registry data without replacing unchanged DOM.
             setInterval(() => {
                 fetchNodes();
-                fetchLogs();
-                // If focus node is not updating fast, check captures too
-                if (!currentSelectedNode || currentSelectedNode.startsWith('cam')) {
-                    fetchCaptures();
-                }
-            }, 60000);
+            }, 15000);
         });
     </script>
 </body>

@@ -17,7 +17,7 @@ os.makedirs(SAVE_DIR, exist_ok=True)
 CORS(app, resources={r"/api/*": {"origins": "http://127.0.0.1:5500"}})
 # Ensure templates directory exists and initialize DB on boot
 database.init_db()
-anomaly_detector.start_poller(poll_interval=50.0)
+anomaly_detector.start_poller(poll_interval=5.0)
 
 # -------------------------------------------------------------------
 # 1. RETRO-COMPATIBILITY & REGISTRATION ENDPOINTS
