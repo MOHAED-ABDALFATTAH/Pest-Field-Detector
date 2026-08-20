@@ -280,7 +280,12 @@ def get_system_logs():
             
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            return jsonify([dict(row) for row in rows]), 200
+            result = []
+            for row in rows:
+                capture = dict(row)
+                capture["prediction_name"] = inference_worker.get_class_name(capture.get("prediction"))
+                result.append(capture)
+            return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

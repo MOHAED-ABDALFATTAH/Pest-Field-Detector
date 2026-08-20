@@ -1396,7 +1396,7 @@
                         badge.style.display = 'flex';
                         if (latestCap.prediction > 0) {
                             badge.className = "prediction-badge prediction-pest";
-                            badgeText.textContent = `PEST DETECTED (Class ${latestCap.prediction})`;
+                            badgeText.textContent = `PEST DETECTED (${latestCap.prediction_name || `Class ${latestCap.prediction}`})`;
                         } else {
                             badge.className = "prediction-badge prediction-clear";
                             badgeText.textContent = "CLEAR";
@@ -1426,7 +1426,7 @@
                             badge.style.display = 'flex';
                             if (cap.prediction > 0) {
                                 badge.className = "prediction-badge prediction-pest";
-                                badgeText.textContent = `PEST DETECTED (Class ${cap.prediction})`;
+                                badgeText.textContent = `PEST DETECTED (${cap.prediction_name || `Class ${cap.prediction}`})`;
                             } else {
                                 badge.className = "prediction-badge prediction-clear";
                                 badgeText.textContent = "CLEAR";

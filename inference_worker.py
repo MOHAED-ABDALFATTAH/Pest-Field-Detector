@@ -5,6 +5,7 @@ import datetime
 import io
 import random
 import time
+import json
 from PIL import Image
 # Gracefully handle missing PyTorch/Torchvision dependencies
 try:
@@ -42,9 +43,35 @@ from logger import log_event
 # -------------------------------------------------------------------
 # Model Configurations & Device Setup
 # -------------------------------------------------------------------
-MODEL_PATH = "best_wavelet_resnet_model.pth"
+MODEL_PATH = os.environ.get("PEST_MODEL_PATH", r"E:\model\best_wavelet_resnet_model.pth")
 SAVE_DIR = "captures"
 os.makedirs(SAVE_DIR, exist_ok=True)
+
+
+def load_class_names(num_classes):
+    """Load training labels when available; checkpoints do not contain them."""
+    mapping_path = os.environ.get("PEST_CLASS_NAMES_PATH", "class_names.json")
+    try:
+        with open(mapping_path, encoding="utf-8") as mapping_file:
+            class_names = json.load(mapping_file)
+        if not isinstance(class_names, list) or len(class_names) != num_classes:
+            raise ValueError(f"Expected a list of {num_classes} class names")
+        return [str(name) for name in class_names]
+    except (FileNotFoundError, json.JSONDecodeError, ValueError) as error:
+        log_event("WARNING", "Inference", f"Class-name mapping unavailable: {error}")
+        return [f"Class {index}" for index in range(num_classes)]
+
+
+CLASS_NAMES = None
+
+
+def get_class_name(prediction):
+    """Return a readable label for a numeric model prediction."""
+    if prediction is None:
+        return "Unknown"
+    if CLASS_NAMES is None or prediction < 0 or prediction >= len(CLASS_NAMES):
+        return f"Class {prediction}"
+    return CLASS_NAMES[prediction]
 
 class HaarDWT2D(nn.Module):
     """2D Haar Wavelet Decomposition."""
@@ -106,6 +133,8 @@ class WaveletEnhancedResNet(nn.Module):
 
 def load_model():
     """Loads the wavelet-enhanced ResNet model, falling back to None if model file is missing or PyTorch is absent."""
+    global CLASS_NAMES
+
     if not HAS_TORCH:
         log_event("WARNING", "Inference", "PyTorch is not installed in the environment. Fallback to mock inference engine.")
         return None
@@ -123,6 +152,7 @@ def load_model():
             for k in checkpoint.keys()
         ):
             num_classes = checkpoint["backbone.fc.weight"].shape[0]
+            CLASS_NAMES = load_class_names(num_classes)
             model = WaveletEnhancedResNet(num_classes=num_classes, backbone_name="resnet50").to(DEVICE)
             model.load_state_dict(checkpoint, strict=True)
             model.eval()
@@ -132,6 +162,7 @@ def load_model():
         if isinstance(checkpoint, nn.Module):
             model = checkpoint.to(DEVICE)
             model.eval()
+            CLASS_NAMES = load_class_names(model.backbone.fc.out_features)
             log_event("INFO", "Inference", "Successfully loaded PyTorch Module.")
             return model
 
@@ -218,7 +249,12 @@ def worker_loop():
                 """, (status, prediction, log_id))
                 conn.commit()
             
-            log_event("INFO", "Inference", f"Processed capture ID {log_id} from {node_id}. Result: {prediction}", node_id=node_id)
+            log_event(
+                "INFO",
+                "Inference",
+                f"Processed capture ID {log_id} from {node_id}. Result: {prediction} ({get_class_name(prediction)})",
+                node_id=node_id,
+            )
         except Exception as e:
             log_event("ERROR", "Inference", f"Exception processing capture ID {log_id} from {node_id}: {e}", node_id=node_id)
             try:
