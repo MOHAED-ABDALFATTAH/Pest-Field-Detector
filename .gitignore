@@ -1,0 +1,20 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+myenv/
+.venv/
+venv/
+
+# Local runtime data
+pest_detector.db
+pest_detector.db-*
+captures/*
+
+# Keep the capture directory available in a fresh checkout
+!captures/.gitkeep
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
